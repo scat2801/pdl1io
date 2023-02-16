@@ -9,5 +9,6 @@ R 4.1.2
 Please install the following packages in Terminal:
 
 sudo apt-get install libcurl4-openssl-dev libssl-dev libfontconfig1-dev libxml2-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
+
 sudo apt install cmake
 
