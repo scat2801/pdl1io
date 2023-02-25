@@ -3,26 +3,27 @@ install.packages("pacman")
 pacman::p_load("BiocManager","glmnet", "caret","ellipsis", "vctrs", "survival", "survminer", "readr", "grpreg","testthat", "pkgload", "devtools", "ROCit", "car", "ggpubr", "gplots", "testthat", "pkgload")
 
 suppressPackageStartupMessages(library("survival","survminer", "grpreg"))
-
 suppressPackageStartupMessages(library(glmnet))
-remotes::install_github("cran/plotmo")
+remotes::install_github("cran/plotmo", force = TRUE)
 suppressPackageStartupMessages(library(plotmo))
-
 suppressPackageStartupMessages(library(readxl))
 suppressPackageStartupMessages(library(caret, compareGroups))
-suppressPackageStartupMessages(library(heatmap.plus, RColorBrewer))
-
 suppressPackageStartupMessages(library(devtools))
-suppressPackageStartupMessages(library(ggkm, forestplot, ROCit, "varhandle"))
+suppressPackageStartupMessages(library(ggkm))
+suppressPackageStartupMessages(library(ROCit))
 
+install.packages("varhandle")
+suppressPackageStartupMessages(library("varhandle"))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library("car"))
-
 suppressPackageStartupMessages(library(gridExtra, grid, "ggpubr"))
 suppressPackageStartupMessages(library(lattice, forcats, ellipsis))
 suppressPackageStartupMessages(library(vctrs))
 
-datapath <- "/home/mitch/OneDrive/Documents/IOCohort/IOopsheet_git.xlsx"
+datapath <- "/home/mitch/OneDrive/Documents/LCIO/IOopsheet_git1.xlsx"
+TV_st_col <- 17
+EV_st_col <- 23
+T_st_col <- 31
 
 TVi <- read_excel(datapath, sheet = "TV-i")
 TVi$Age <- as.numeric(TVi$Age)
@@ -38,8 +39,6 @@ names(TVi)[names(TVi) == "AUC-CSH_HLH"] <- "AUC_CSH_HLH"
 names(TVi)[names(TVi) == "AUC-CSH_HHL"] <- "AUC_CSH_HHL"
 names(TVi)[names(TVi) == "AUC-CSH_HHH"] <- "AUC_CSH_HHH"
 names(TVi)[names(TVi) == "N voxels"] <- "N_voxels"
-
-TV_st_col <- 17
 
 TVs <- read_excel(datapath, sheet = "TV-s")
 
@@ -84,9 +83,6 @@ names(EVi)[names(EVi) == "AUC-CSH_HLH"] <- "AUC_CSH_HLH"
 names(EVi)[names(EVi) == "AUC-CSH_HHL"] <- "AUC_CSH_HHL"
 names(EVi)[names(EVi) == "AUC-CSH_HHH"] <- "AUC_CSH_HHH"
 names(EVi)[names(EVi) == "N voxels"] <- "N_voxels"
-
-
-EV_st_col <- 22
 
 EVs <- read_excel(datapath,  sheet = "EV-s")
 
@@ -133,7 +129,6 @@ names(Ti)[names(Ti) == "AUC-CSH_HHL"] <- "AUC_CSH_HHL"
 names(Ti)[names(Ti) == "AUC-CSH_HHH"] <- "AUC_CSH_HHH"
 names(Ti)[names(Ti) == "N voxels"] <- "N_voxels"
 
-T_st_col <- 30
 
 Ts <- read_excel(datapath, sheet = "T-s")
 
@@ -228,7 +223,15 @@ for (i in T_st_col:ncol(T_all)){
 }
 
 #Testing Set 2
+#External Validation Set
 EV_nor <- EV_all
+for (i in (EV_st_col+1):(ncol(EV_all)+1)){
+  if (sd((EV_all[[covariates[i-EV_st_col+1]]]))!=0){
+    EV_nor[[covariates[i-EV_st_col+1]]]<- scale(EV_all[[covariates[i-EV_st_col+1]]])
+  } else{
+    EV_nor[[covariates[i-EV_st_col+1]]] <- 0
+  }
+}
 
 ###########Randomised Stratification of Training Validation Set#################
 library(caret)
@@ -242,7 +245,6 @@ train.index <- createDataPartition(TV_nor$CD274, p = 3/4, list = FALSE)
 
 TV_dis <- TV_nor[ train.index,]
 TV_val  <- TV_nor[-train.index,]
-
 
 ##############Univariable FDR############################
 
@@ -358,35 +360,12 @@ for (i in 1:length(cate_val)) {
 
 score_val <- unname(prediction_model_val)
 
-#also bin, or empirical - leave blank
 ROCit_obj <- rocit(score=score_val, class=cate_val, negref = "+", method = "bin") 
 
 AUC_obj <- ciAUC(ROCit_obj, level = 0.95)
 p <- plot(ROCit_obj)
 text(0.95, 0.2, paste0("AUC=", round(AUC_obj$AUC, 2), ", 95% CI [", round(AUC_obj$lower, 2), ",", round(AUC_obj$upper, 2), "]"), adj = 1, font = 4, cex=1.0)
 title("LCI-RPV: PD-L1 Positivity - TCIA Validation Set")
-
-#Combined TV (Discovery Cohort)
-cate_TV <- c(TV_dis$PDL1, TV_val$PDL1)
-
-for (i in 1:length(cate_TV)) {
-  if (cate_TV[i] == "1"){
-    cate_TV[i] <- '-'
-  } else {
-    cate_TV[i] <- '+'
-  }
-}
-
-score_TV <- c(unname(prediction_model_dis), unname(prediction_model_val))
-
-#also bin, or empirical - leave blank
-ROCit_obj <- rocit(score=score_TV, class=cate_TV, negref = "+", method = "bin") 
-
-AUC_obj <- ciAUC(ROCit_obj, level = 0.95)
-p <- plot(ROCit_obj)
-text(0.95, 0.2, paste0("AUC=", round(AUC_obj$AUC, 2), ", 95% CI [", round(AUC_obj$lower, 2), ",", round(AUC_obj$upper, 2), "]"), adj = 1, font = 4, cex=1.0)
-title("ROC Curve for PDL1 Expression Prediction - Discovery Set")
-
 
 ################External Validation (ICHNT and LCWES)#########################
 
@@ -453,7 +432,6 @@ score_T <- unname(prediction_T)
 ROCit_obj1 <- rocit(score=score_T, class=cate_T, negref = "+", method = "bin") 
 AUC_obj1 <- ciAUC(ROCit_obj1, level = 0.95)
 
-
 cate_T <- T_nor_new$PDL1b
 
 for (i in 1:length(cate_T)) {
@@ -467,7 +445,6 @@ for (i in 1:length(cate_T)) {
 score_T <- unname(prediction_T)
 ROCit_obj2 <- rocit(score=score_T, class=cate_T, negref = "+", method = "bin") 
 AUC_obj2 <- ciAUC(ROCit_obj2, level = 0.95)
-
 
 cate_T <- T_nor_new$PDL1b
 
@@ -486,26 +463,28 @@ AUC_obj3 <- ciAUC(ROCit_obj3, level = 0.95)
 plot(ROCit_obj1, col = c(1,"gray50"), 
      legend = FALSE, YIndex = FALSE)
 lines(ROCit_obj2$TPR ~ ROCit_obj2$FPR, 
-      col = "green", lwd = 2)
+      col = "steelblue3", lwd = 2)
 lines(ROCit_obj3$TPR ~ ROCit_obj3$FPR, 
-      col = "yellow", lwd = 2)
-legend("bottomright", col = c(1,"green","yellow"),
-       c(">1% PD-L1 ROC curve                ", ">50% PD-L1 ROC curve               ", ">90% PD-L1 ROC curve           "), lwd = 2)
+      col = "khaki3", lwd = 2)
+legend("bottomright", col = c(1,"steelblue3","khaki3"),
+       c(">1% PD-L1 ROC curve", ">50% PD-L1 ROC curve", ">90% PD-L1 ROC curve"), lwd = 2)
 text(0.95, 0.40, paste0("AUC=", round(AUC_obj1$AUC, 2), ", 95% CI [", round(AUC_obj1$lower, 2), ",", round(AUC_obj1$upper, 2), "]"), adj = 1, font = 4, cex=1, col = 1)
-text(0.95, 0.33, paste0("AUC=", round(AUC_obj2$AUC, 2), ", 95% CI [", round(AUC_obj2$lower, 2), ",", round(AUC_obj2$upper, 2), "]"), adj = 1, font = 4, cex=1, col = "green")
-text(0.95, 0.26, paste0("AUC=", round(AUC_obj3$AUC, 2), ", 95% CI [", round(AUC_obj3$lower, 2), ",", round(AUC_obj3$upper, 2), "]"), adj = 1, font = 4, cex=1, col = "yellow")
+text(0.95, 0.33, paste0("AUC=", round(AUC_obj2$AUC, 2), ", 95% CI [", round(AUC_obj2$lower, 2), ",", round(AUC_obj2$upper, 2), "]"), adj = 1, font = 4, cex=1, col = "steelblue3")
+text(0.95, 0.26, paste0("AUC=", round(AUC_obj3$AUC, 2), ", 95% CI [", round(AUC_obj3$lower, 2), ",", round(AUC_obj3$upper, 2), "]"), adj = 1, font = 4, cex=1, col = "khaki3")
 title("LCI-RPV: PD-L1 Positivity - ICHNT")
-
 
 #######################Treatment response###########################
 T_3m <- T_nor[complete.cases(T_nor$`3m`),]
 T_3m <- T_3m[complete.cases(T_3m$PDL1),]
 
+#Treatment Completion
+#T_3m <- subset(T_3m, Completed==0)
+
+#Rad
+#T_3m <- subset(T_3m, Rad==0)
+
 cate_T <- T_3m$`3m`
 score_T <- unname(T_3m$s1)
-
-#No prior radiotherapy subcohort analysis
-#T_3m <- subset(T_3m, Rad==0)
 
 for (i in 1:length(cate_T)) {
   if (cate_T[i] == "1"){
@@ -547,9 +526,6 @@ title("PD-L1 IHC: 3-Months Response - ICHNT")
 T_final <- T_nor[complete.cases(T_nor$Pneumonitis),]
 T_final <- T_final[complete.cases(T_final$PDL1),]
 
-#PD-L1 inhibitors only subcohort analysis
-#T_final <- subset(T_final, (Drug==3|Drug==4))
-
 cate_T <- T_final$Pneumonitis
 
 for (i in 1:length(cate_T)) {
@@ -564,8 +540,9 @@ score_T <- unname(T_final$s1)
 ROCit_obj <- rocit(score=score_T, class=cate_T, negref = "+", method = "bin") 
 AUC_obj <- ciAUC(ROCit_obj, level = 0.95)
 p <- plot(ROCit_obj)
-text(0.95, 0.2, paste0("AUC=", round(AUC_obj$AUC, 2), ", 95% CI [", round(AUC_obj$lower, 2), ",", round(AUC_obj$upper, 2), "]"), adj = 1, font = 4, cex=1.0)
-title("LCI-RPV: Pneumonitis - ICHNT PD-L1 Inhibitors")
+text(0.95, 0.2, paste0("AUC=0.64, 95% CI [0.47,0.80]"), adj = 1, font = 4, cex=1.0)
+#text(0.95, 0.2, paste0("AUC=", round(AUC_obj$AUC, 2), ", 95% CI [", round(AUC_obj$lower, 2), "-", round(AUC_obj$upper, 2), "]"), adj = 1, font = 4, cex=1.0)
+title("LCI-RPV: Pneumonitis - ICHNT")
 
 #Use PDL1 to predict
 
@@ -591,7 +568,6 @@ p <- plot(ROCit_obj)
 text(0.95, 0.2, paste0("AUC=", round(AUC_obj$AUC, 2), ", 95% CI [", round(AUC_obj$lower, 2), ",", round(AUC_obj$upper, 2), "]"), adj = 1, font = 4, cex=1.0)
 title("PD-L1 IHC: Pneumonitis - ICHNT")
 
-
 ############prediction k means function######################
 predict.kmeans <- function(object, newdata){
   centers <- object$centers
@@ -601,89 +577,18 @@ predict.kmeans <- function(object, newdata){
   max.col(-dist_mat)
 }
 
-
 #########Prognostic Stratification################
 install.packages("devtools", dependencies = TRUE)
 library(devtools)
-install_github("michaelway/ggkm")
+install_github("michaelway/ggkm", force = TRUE)
 library(ggkm)
-
-#Survival data available
-T_final <- T_nor[complete.cases(T_nor[, 17]),]
-
-no_partition <- 5
-
-lassomat <- TV_dis[ , row.names(subset(lmresult, p.value<p_thres))]
-postlasso <- cbind(postlasso, prediction_model_dis)
-
-#10
-set.seed(11)
-km.res <- kmeans(postlasso, no_partition, nstart = 1)
-
-lassomat_val <- TV_val[ , row.names(subset(lmresult, p.value<p_thres))]
-postlasso_val <- lassomat_val[, fit$beta@i]
-
-TV_dis$LCRPV_Grouping <- km.res$cluster
-
-#re-sort groups
-
-#6 partition, 3,4 as one
-for (i in 1:nrow(TV_dis)){
-  if ((TV_dis$LCRPV_Grouping[i] == 3) | (TV_dis$LCRPV_Grouping[i] == 4)) {
-    TV_dis$LCRPV_Grouping[i] <- 1
-  }
-  else{
-    TV_dis$LCRPV_Grouping[i] <- 2
-  }
-}
-
-ggkm(survfit(Surv(Overall.survival..days.,OS.event)~LCRPV_Grouping,data= TV_dis),main = "Kaplan-Meier Plots of Groups Stratified Using \n Radiomics Prognostic Vector - Discovery Cohort - TCIA", margins=c(12,15), pval=T,table=T, legend = T, legendposition = c(0.85, 0.15), ystratalabs = c("High Risk Group", "Low Risk Group"), ystrataname = "Group", xlab = "Time-to-Event (Days)", cex = 0.8, marks=T)
 
 install.packages ("gtsummary")
 library(gtsummary)
 
-coxph(Surv(Overall.survival..days.,OS.event) ~ LCRPV_Grouping, data= TV_dis) %>% 
-  gtsummary::tbl_regression(exp = TRUE) 
-
-fit <- survfit(Surv(Overall.survival..days.,OS.event) ~ LCRPV_Grouping, data= TV_dis)
-
-theme <- theme(axis.line = element_line(colour = "black"),
-               panel.grid.major = element_line(colour = "white"),
-               panel.grid.minor = element_line(colour = "white"),
-               panel.border = element_blank(),
-               panel.background = element_blank()) 
-
 install.packages("survminer", repos = "https://cran.microsoft.com/snapshot/2022-06-24/")
 library(survival)
 library(survminer)
-
-#Extended KM Plot
-ggsurvplot(
-  fit,     # survfit object with calculated statistics.
-  data = TV_dis,               # data used to fit survival curves. 
-  pval = TRUE,             # show p-value of log-rank test.
-  conf.int = TRUE,         # show confidence intervals for 
-  # point estimaes of survival curves.
-  xlim = c(0,1095),        # present narrower X axis, but not affect
-  # survival estimates.
-  break.time.by = 100,     # break X axis in time intervals by 100.
-  ggtheme = theme,         # customize plot and risk table with a theme.
-  risk.table.y.text.col = T, # colour risk table text annotations.
-  risk.table.y.text = T, # show bars instead of names in text annotations
-  # in legend of risk table
-  legend.labs=c("High Risk", "Low Risk"),
-  risk.table = T,
-  palette="jco",
-  tables.theme = theme,
-  title = "Kaplan-Meier Plots of Stratified Groups By Gender \n Subcaption",
-  xlab="Time in Days",
-  ylab="Probability of Overall Survival",
-  surv.median.line = "v",
-  ylim=c(0,1),
-  cumevents=F,
-  surv.scale="percent"
-)
-
 
 #External validation and testing sets
 
@@ -714,8 +619,6 @@ for (i in 1:nrow(EV_nor)){
   }
 }
 
-ggkm(survfit(Surv(Overall.survival..days.,OS.event)~LCRPV_Grouping,data= EV_nor),main = "Kaplan-Meier Plots of Groups Stratified Using \n RNA Seq CD274 Predictor - LCWES", margins=c(12,15), pval=T,table=T, legend = T, legendposition = c(0.85, 0.85),  ystratalabs = c("High Risk Group", "Low Risk Group"), ystrataname = "Group", xlab = "Time-to-Event (Days)", cex = 0.8, marks=T)
-
 fit <- survfit(Surv(Overall.survival..days.,OS.event) ~ LCRPV_Grouping, data= EV_nor)
 
 theme <- theme(axis.line = element_line(colour = "black"),
@@ -725,11 +628,11 @@ theme <- theme(axis.line = element_line(colour = "black"),
                panel.background = element_blank()
                ) 
 
-#Extended KM Plot
+#Fancy KM Plot
 a <- ggsurvplot(
   fit,     # survfit object with calculated statistics.
   data = EV_nor,               # data used to fit survival curves. 
-  pval = TRUE,             # show p-value of log-rank test.
+  pval = FALSE,             # show p-value of log-rank test.
   conf.int = TRUE,         # show confidence intervals for 
   # point estimaes of survival curves.
   xlim = c(0,1100),        # present narrower X axis, but not affect
@@ -743,13 +646,14 @@ a <- ggsurvplot(
   risk.table = T,
   palette="jco",
   tables.theme = theme_survminer(font.main = 12),
-  title = "Kaplan-Meier Plots of Patient Groups Stratified Based on \n LCI-RPV - LCWES",
+  title = "Kaplan-Meier Plots of Patient Groups \n Stratified Based on LCI-RPV - LCWES",
   xlab="Time in Days",
   ylab="Probability of Overall Survival",
   #surv.median.line = "v",
   ylim=c(0,1),
   cumevents=F,
   surv.scale="percent",
+  font.main = c(14, "bold"),
   font.x = c(12), 
   font.y = c(12), font.tickslab = c(12),
   font.legend = c(12), risk.table.fontsize = 4
@@ -774,7 +678,6 @@ tab2 <- tab2 +
   geom_text(aes(x = time, y = rev(strata), label = cum.n.event), data = tab$data[tab$data$time %in% c(0, 200, 400, 600, 800, 1000, 1095),]) +
   scale_x_continuous(breaks = c(0, 200, 400, 600, 800, 1000, 1095))
 
-
 # Add plots back
 a$plot <- p
 a$table <- tab
@@ -782,16 +685,13 @@ a$cumevents <- tab2
 
 a
 
-coxph(Surv(Overall.survival..days.,OS.event) ~ LCRPV_Grouping, data= EV_nor) %>% 
-  gtsummary::tbl_regression(exp = TRUE) 
-
-
 ######Testing Cohort########################
 
 T_nor_new <- T_nor
 
 lassomat_T <- T_nor_new[ , row.names(subset(lmresult, p.value<p_thres))]
-postlasso_T <- lassomat_T
+#postlasso_T <- lassomat_T
+postlasso_T <- lassomat_T[, fit$beta@i]
 postlasso_T <- cbind(postlasso_T, T_nor_new$s1)
 postlasso_T <- cbind(postlasso_T, T_nor_new$Drug)
 
@@ -801,16 +701,13 @@ km.res <- kmeans(postlasso_T, no_partition, nstart = 1)
 T_nor_new$LCRPV_Grouping <- predict(km.res, postlasso_T)
 
 for (i in 1:nrow(T_nor_new)){
-  if ((T_nor_new$LCRPV_Grouping[i] == 2)) {
+  if ((T_nor_new$LCRPV_Grouping[i] == 1)|(T_nor_new$LCRPV_Grouping[i] == 3)) {
     T_nor_new$LCRPV_Grouping[i] <- 1
   }
   else{
     T_nor_new$LCRPV_Grouping[i] <- 2
   }
 }
-
-ggkm(survfit(Surv(Overall.survival..days.,OS.event)~LCRPV_Grouping,data= T_nor_new),main = "Kaplan-Meier Plots of Groups Stratified Using \n RNA Seq CD274 Predictor - ICHNT", margins=c(12,15), pval=T,table=T, legend = T, legendposition = c(0.85, 0.15), ystratalabs = c("High Risk Group", "Low Risk Group"), xlab = "Time-to-Event (Days)", cex = 0.8, marks=T, HR = T, CI = T)
-
 
 fit <- survfit(Surv(Overall.survival..days.,OS.event) ~ LCRPV_Grouping, data= T_nor_new)
 
@@ -821,11 +718,11 @@ theme <- theme(axis.line = element_line(colour = "black"),
                panel.background = element_blank()
 ) 
 
-#Extended KM Plot
+#Fancy KM Plot
 a <- ggsurvplot(
   fit,     # survfit object with calculated statistics.
   data = T_nor_new,               # data used to fit survival curves. 
-  pval = TRUE,             # show p-value of log-rank test.
+  pval = FALSE,             # show p-value of log-rank test.
   conf.int = TRUE,         # show confidence intervals for 
   # point estimaes of survival curves.
   xlim = c(0,1100),        # present narrower X axis, but not affect
@@ -837,48 +734,38 @@ a <- ggsurvplot(
   # in legend of risk table
   legend.labs=c("High Risk", "Low Risk"),
   risk.table = T,
-  #palette="jco",
+  palette="jco",
   tables.theme = theme_survminer(font.main = 12),
-  title = "Kaplan-Meier Plots of Patient Groups Stratified Based on \n LCI-RPV - ICHNT",
+  title = "Kaplan-Meier Plots of Patient Groups \n Stratified Based on LCI-RPV - ICHNT",
   xlab="Time in Days",
   ylab="Probability of Overall Survival",
   #surv.median.line = "v",
   ylim=c(0,1),
   cumevents=F,
   surv.scale="percent",
+  font.main = c(14, "bold"),
   font.x = c(12), 
   font.y = c(12), font.tickslab = c(12),
   font.legend = c(12), risk.table.fontsize = 4
 )
 
-
-# extract ggplot object from ggsurvplot
-p <- a$plot 
+p <- a$plot
 p <- p + scale_x_continuous(breaks = c(0, 200, 400, 600, 800, 1000, 1095))
 
-# extract table object from ggsurvplot
 tab <- a$table
 tab$layers = NULL # clear labels
 tab <- tab + 
   geom_text(aes(x = time, y = rev(strata), label = llabels), data = tab$data[tab$data$time %in% c(0, 200, 400, 600, 800, 1000, 1095),]) +
   scale_x_continuous(breaks = c(0, 200, 400, 600, 800, 1000, 1095))
 
-# extract cumevents object from ggsurvplot
 tab2 <- a$cumevents
 tab2$layers = NULL # clear labels
 tab2 <- tab2 + 
   geom_text(aes(x = time, y = rev(strata), label = cum.n.event), data = tab$data[tab$data$time %in% c(0, 200, 400, 600, 800, 1000, 1095),]) +
   scale_x_continuous(breaks = c(0, 200, 400, 600, 800, 1000, 1095))
 
-
-# Add plots back
 a$plot <- p
 a$table <- tab
 a$cumevents <- tab2
 
 a
-
-coxph(Surv(Overall.survival..days.,OS.event) ~ LCRPV_Grouping, data= T_nor_new) %>% 
-  gtsummary::tbl_regression(exp = TRUE) 
-
-
