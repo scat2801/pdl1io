@@ -20,7 +20,7 @@ suppressPackageStartupMessages(library(gridExtra, grid, "ggpubr"))
 suppressPackageStartupMessages(library(lattice, forcats, ellipsis))
 suppressPackageStartupMessages(library(vctrs))
 
-datapath <- "/home/mitch/OneDrive/Documents/LCIO/IOopsheet_git1.xlsx"
+datapath <- "IOopsheet_git1.xlsx"
 TV_st_col <- 17
 EV_st_col <- 23
 T_st_col <- 31
